@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"runtime"
 	"time"
 )
 
@@ -30,7 +31,7 @@ func run() error {
 
 	// 実装処理
 	var conn net.Conn
-	conn, err := DialWithContext("tcp", addr, ctx)
+	conn, cancelFunc, err := DialWithContext("tcp", addr, ctx)
 	if err != nil {
 		defer cancel()
 		return err
@@ -38,8 +39,13 @@ func run() error {
 
 	go func() {
 		<-time.After(3 * time.Second)
+		fmt.Println(runtime.NumGoroutine())
 		fmt.Println("cancelled")
-		cancel()
+
+		cancelFunc()
+		conn.Close()
+
+		fmt.Println(runtime.NumGoroutine())
 	}()
 
 	go func() {
@@ -51,19 +57,25 @@ func run() error {
 	return nil
 }
 
-func DialWithContext(network, address string, ctx context.Context) (net.Conn, error) {
+func DialWithContext(network, address string, ctx context.Context) (net.Conn, func(), error) {
 	// TODO: implement
 	conn, err := net.Dial(network, address)
 	if err != nil {
-		return nil, err
+		return nil, func() {}, err
 	}
+
+	parent := make(chan struct{})
 
 	go func() {
 		select {
 		case <-ctx.Done():
 			conn.Close()
+		case <-parent:
+			return
 		}
 	}()
 
-	return conn, nil
+	return conn, func() {
+		close(parent)
+	}, nil
 }
