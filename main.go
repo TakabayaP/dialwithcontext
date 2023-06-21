@@ -37,18 +37,16 @@ func run() error {
 	}
 
 	go func() {
-		<-time.After(1 * time.Second)
+		<-time.After(3 * time.Second)
 		fmt.Println("cancelled")
 		cancel()
 	}()
 
-	// go func() {
-	// io.Copy(os.Stdout, conn)
-	// }()
+	go func() {
+		io.Copy(os.Stdout, conn)
+	}()
 
-	io.Copy(os.Stdout, conn)
-	_, err = io.Copy(conn, os.Stdin)
-	fmt.Println(err)
+	io.Copy(conn, os.Stdin)
 
 	return nil
 }
@@ -59,10 +57,13 @@ func DialWithContext(network, address string, ctx context.Context) (net.Conn, er
 	if err != nil {
 		return nil, err
 	}
-	_ = context.AfterFunc(ctx, func() {
-		fmt.Println("closing")
-		conn.Close()
-		// conn.SetDeadline(time.Now())
-	})
+
+	go func() {
+		select {
+		case <-ctx.Done():
+			conn.Close()
+		}
+	}()
+
 	return conn, nil
 }
